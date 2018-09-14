@@ -1,9 +1,15 @@
-
 name: "LeNet"
-
 input: "data"
-
 input_dim: 63
 input_dim: 1
 input_dim: 28
 input_dim: 28
+bottom: "data"
+top: "conv1"
+lr_mult: 1
+num_output: 20
+kernel_size: 5
+stride: 1
+pad: 0
+type: "xavier"
+pool: MAX
