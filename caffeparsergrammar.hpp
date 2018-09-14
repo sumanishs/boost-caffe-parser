@@ -23,6 +23,8 @@ struct my_tokens : lex::lexer<Lexer>
         unsigned_number         = "[0-9][0-9]*";
         colon_                  = "[:]";
         semicolon_              = "[;]";
+        left_brace_             = "[\\{]";
+        right_brace_            = "[\\}]";              
         name_                   = "name";
 		input_					= "input";
         input_dim_              = "input_dim";
@@ -36,28 +38,23 @@ struct my_tokens : lex::lexer<Lexer>
         pad_                    = "pad";
         type_                   = "type";
         pool_                   = "pool";
+        param_                  = "param";
+        weight_filler_          = "weight_filler";
+        bias_filler_            = "bias_filler";
+        layer_                  = "layer";
+        convolution_param_      = "convolution_param";
+        pooling_param_          = "pooling_param";
+        inner_product_param_    = "inner_product_param";
         line                    = "[\\n]";
     
         this->self  += 
                       simple_identifier
-                    | unsigned_number
-                    | left_brace
-                    | right_brace
-                    | colon_
-                    | semicolon_
-                    | name_
-					| input_
-                    | input_dim_
-                    | output_dim_
-                    | bottom_
-                    | top_
-                    | lr_mult_
-                    | num_output_
-                    | kernel_size_
-                    | stride_
-                    | pad_
-                    | type_
-                    | pool_
+                    | unsigned_number | left_brace_ | right_brace_ | colon_
+                    | semicolon_ | name_ | input_ | input_dim_ | output_dim_
+                    | bottom_ | top_ | lr_mult_ | num_output_ | kernel_size_
+                    | stride_ | pad_ | type_ | pool_ | param_ | weight_filler_
+                    | bias_filler_ | layer_ | convolution_param_ | pooling_param_
+                    | inner_product_param_
                     ;
 
         this->self("WS") =  lex::token_def<>("\\/\\/[^\\n]*")           // Single line C like comment 
@@ -67,30 +64,17 @@ struct my_tokens : lex::lexer<Lexer>
     }
     lex::token_def<std::string> simple_identifier;
     
-    lex::token_def<std::string> name_,
-								input_,
-                                input_dim_,
-                                output_dim_,
-                                bottom_,
-                                top_,
-                                lr_mult_,
-                                num_output_,
-                                kernel_size_,
-                                stride_,
-                                pad_,
-                                type_,
-                                pool_
+    lex::token_def<std::string> name_, input_, input_dim_, output_dim_, bottom_, top_, lr_mult_,
+                                num_output_, kernel_size_, stride_, pad_, type_, pool_, param_,
+                                weight_filler_, bias_filler_, layer_, convolution_param_, pooling_param_,
+                                inner_product_param_
                                 ;
     
-    lex::token_def<int> unsigned_number;
+    lex::token_def<int> unsigned_number
+                        ;
 
-    lex::token_def<std::string> 
-                     left_brace, 
-                     right_brace, 
-                     colon_,
-                     semicolon_,
-                     line
-                     ;
+    lex::token_def<std::string> left_brace_, right_brace_, colon_, semicolon_, line
+                                ;
 };
 
 template<typename Iterator, typename Lexer>
@@ -113,9 +97,62 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
         pad_            = tok.pad_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
         type_           = tok.type_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()] ;
         pool_           = tok.pool_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()] ;
-        
-        
+        param_          = tok.param_ [PrintStr()] >> tok.left_brace_ >> lr_mult_ >> tok.right_brace_;
+        weight_filler_  = tok.weight_filler_ [PrintStr()] >> tok.left_brace_ >> type_ >> tok.right_brace_;
+        bias_filler_    = tok.bias_filler_  [PrintStr()] >> tok.left_brace_ >> type_ >> tok.right_brace_;
 
+
+        convolution_param_statements_ = num_output_
+                                        | kernel_size_
+                                        | stride_
+                                        | pad_
+                                        | weight_filler_
+                                        | bias_filler_
+                                        ; 
+        
+        convolution_param_  = tok.convolution_param_ [PrintStr()]
+                              >> tok.left_brace_
+                              >> +convolution_param_statements_
+                              >> tok.right_brace_
+                              ;
+        
+        pooling_param_statements_   = pool_
+                                      | kernel_size_
+                                      | stride_
+                                      ;  
+
+        pooling_param_      = tok.pooling_param_ [PrintStr()]
+                              >> tok.left_brace_
+                              >> +pooling_param_statements_
+                              >> tok.right_brace_
+                              ; 
+
+        inner_product_param_statements_ = num_output_
+                                          | weight_filler_
+                                          | bias_filler_
+                                          ;      
+
+        inner_product_param_ = tok.inner_product_param_ [PrintStr()]
+                               >> tok.left_brace_
+                               >> +inner_product_param_statements_
+                               >> tok.right_brace_
+                               ;   
+
+        layer_statements_   =   name_
+                                | type_
+                                | bottom_
+                                | top_
+                                | param_
+                                | convolution_param_
+                                | pooling_param_
+                                | inner_product_param_
+                                ;        
+
+        layer_          = tok.layer_ [PrintStr()] 
+                          >> tok.left_brace_
+                          >> +layer_statements_
+                          >> tok.right_brace_
+                          ;
 
         statement = name_
 					| input_
@@ -130,6 +167,10 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                     | pad_
                     | type_
                     | pool_
+                    | param_
+                    | weight_filler_
+                    | bias_filler_  
+                    | layer_
                     ;
 
         start = +statement;
@@ -138,7 +179,9 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
     
     qi::rule<Iterator, qi::in_state_skipper<Lexer> > name_, input_, input_dim_, output_dim_, bottom_, top_,
                                                      lr_mult_, num_output_, kernel_size_, stride_, pad_, type_,
-                                                     pool_
+                                                     pool_, param_, weight_filler_, bias_filler_, layer_, layer_statements_,
+                                                     convolution_param_, convolution_param_statements_, pooling_param_,
+                                                     pooling_param_statements_, inner_product_param_, inner_product_param_statements_
                                                      ;
 };
 
