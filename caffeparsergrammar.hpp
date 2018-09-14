@@ -21,6 +21,7 @@ struct my_tokens : lex::lexer<Lexer>
     {
         simple_identifier       = "[\"]*[a-zA-Z_][a-zA-Z_0-9]*[\"]*\n";
         unsigned_number         = "[0-9][0-9]*";
+        double_number           = "[0-9]*[.][0-9][0-9]*";
         colon_                  = "[:]";
         semicolon_              = "[;]";
         left_brace_             = "[\\{]";
@@ -45,16 +46,31 @@ struct my_tokens : lex::lexer<Lexer>
         convolution_param_      = "convolution_param";
         pooling_param_          = "pooling_param";
         inner_product_param_    = "inner_product_param";
+        dim_                    = "dim";
+        input_shape_            = "input_shape";
+        decay_mult_             = "decay_mult";
+        alpha_                  = "alpha";
+        beta_                   = "beta";
+        lrn_param_              = "lrn_param";
+        local_size_             = "local_size";
+        group_                  = "group";
+        dropout_ratio_          = "dropout_ratio";
+        dropout_param_          = "dropout_param";
         line                    = "[\\n]";
     
         this->self  += 
-                      simple_identifier
+                      simple_identifier | double_number
                     | unsigned_number | left_brace_ | right_brace_ | colon_
                     | semicolon_ | name_ | input_ | input_dim_ | output_dim_
                     | bottom_ | top_ | lr_mult_ | num_output_ | kernel_size_
                     | stride_ | pad_ | type_ | pool_ | param_ | weight_filler_
                     | bias_filler_ | layer_ | convolution_param_ | pooling_param_
                     | inner_product_param_
+                    ;
+
+        this->self +=
+                      dim_ | input_shape_ | decay_mult_ | alpha_ | beta_ | lrn_param_
+                    | local_size_ | group_ | dropout_ratio_ | dropout_param_
                     ;
 
         this->self("WS") =  lex::token_def<>("\\/\\/[^\\n]*")           // Single line C like comment 
@@ -67,11 +83,16 @@ struct my_tokens : lex::lexer<Lexer>
     lex::token_def<std::string> name_, input_, input_dim_, output_dim_, bottom_, top_, lr_mult_,
                                 num_output_, kernel_size_, stride_, pad_, type_, pool_, param_,
                                 weight_filler_, bias_filler_, layer_, convolution_param_, pooling_param_,
-                                inner_product_param_
+                                inner_product_param_ ;
+
+    lex::token_def<std::string> dim_, input_shape_, decay_mult_, local_size_, alpha_, beta_, lrn_param_,
+                                group_, dropout_ratio_, dropout_param_
                                 ;
     
-    lex::token_def<int> unsigned_number
+    lex::token_def<int> unsigned_number 
                         ;
+    lex::token_def<double> double_number
+                           ; 
 
     lex::token_def<std::string> left_brace_, right_brace_, colon_, semicolon_, line
                                 ;
@@ -97,10 +118,31 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
         pad_            = tok.pad_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
         type_           = tok.type_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()] ;
         pool_           = tok.pool_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()] ;
-        param_          = tok.param_ [PrintStr()] >> tok.left_brace_ >> lr_mult_ >> tok.right_brace_;
         weight_filler_  = tok.weight_filler_ [PrintStr()] >> tok.left_brace_ >> type_ >> tok.right_brace_;
         bias_filler_    = tok.bias_filler_  [PrintStr()] >> tok.left_brace_ >> type_ >> tok.right_brace_;
+        
+        dim_            = tok.dim_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        decay_mult_     = tok.decay_mult_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        local_size_     = tok.local_size_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        alpha_          = tok.alpha_ [PrintStr()] >> tok.colon_ >> tok.double_number [PrintDouble()];
+        beta_           = tok.beta_ [PrintStr()] >> tok.colon_ >> tok.double_number [PrintDouble()];
+        group_          = tok.group_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintDouble()];
+        dropout_ratio_  = tok.dropout_ratio_ [PrintStr()] >> tok.colon_ >> tok.double_number [PrintDouble()];
 
+        param_statements_   = lr_mult_
+                             | decay_mult_
+                             ;
+
+        param_          = tok.param_ [PrintStr()] 
+                          >> tok.left_brace_ 
+                          >> +param_statements_
+                          >> tok.right_brace_;
+
+        input_shape_    = tok.input_shape_ [PrintStr()]
+                          >> tok.left_brace_
+                          >> +dim_
+                          >> tok.right_brace_
+                          ;
 
         convolution_param_statements_ = num_output_
                                         | kernel_size_
@@ -108,6 +150,7 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                                         | pad_
                                         | weight_filler_
                                         | bias_filler_
+                                        | group_
                                         ; 
         
         convolution_param_  = tok.convolution_param_ [PrintStr()]
@@ -137,6 +180,27 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                                >> +inner_product_param_statements_
                                >> tok.right_brace_
                                ;   
+        
+        lrn_param_statements_   = local_size_ 
+                                | alpha_
+                                | beta_
+                                ;
+
+        lrn_param_          = tok.lrn_param_ [PrintStr()]
+                              >> tok.left_brace_
+                              >> +lrn_param_statements_
+                              >> tok.right_brace_
+                              ;
+
+        dropout_param_statements_ = dropout_ratio_
+                                    ;        
+
+
+        dropout_param_      = tok.dropout_param_ [PrintStr()]
+                              >> tok.left_brace_
+                              >> +dropout_param_statements_
+                              >> tok.right_brace_
+                              ;  
 
         layer_statements_   =   name_
                                 | type_
@@ -146,6 +210,8 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                                 | convolution_param_
                                 | pooling_param_
                                 | inner_product_param_
+                                | lrn_param_
+                                | dropout_param_
                                 ;        
 
         layer_          = tok.layer_ [PrintStr()] 
@@ -167,9 +233,13 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                     | pad_
                     | type_
                     | pool_
+                    | alpha_
+                    | beta_
+                    | local_size_
                     | param_
                     | weight_filler_
                     | bias_filler_  
+                    | input_shape_
                     | layer_
                     ;
 
@@ -179,9 +249,15 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
     
     qi::rule<Iterator, qi::in_state_skipper<Lexer> > name_, input_, input_dim_, output_dim_, bottom_, top_,
                                                      lr_mult_, num_output_, kernel_size_, stride_, pad_, type_,
-                                                     pool_, param_, weight_filler_, bias_filler_, layer_, layer_statements_,
-                                                     convolution_param_, convolution_param_statements_, pooling_param_,
-                                                     pooling_param_statements_, inner_product_param_, inner_product_param_statements_
+                                                     pool_, param_, param_statements_, weight_filler_, bias_filler_, 
+                                                     layer_, layer_statements_, convolution_param_, convolution_param_statements_, 
+                                                     pooling_param_, pooling_param_statements_, inner_product_param_, 
+                                                     inner_product_param_statements_
+                                                     ;
+    
+    qi::rule<Iterator, qi::in_state_skipper<Lexer> > dim_, input_shape_, input_shape_statements_, decay_mult_, alpha_, beta_,
+                                                     local_size_, lrn_param_, lrn_param_statements_, group_, dropout_ratio_,
+                                                     dropout_param_, dropout_param_statements_
                                                      ;
 };
 

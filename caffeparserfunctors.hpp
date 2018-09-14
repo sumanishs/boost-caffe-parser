@@ -20,6 +20,13 @@ struct PrintInt {
     PrintInt() {}
 };
 
+struct PrintDouble {
+    void operator()(const double& d, qi::unused_type, qi::unused_type) const{
+        std::cout << d ;
+    }
+    PrintDouble() {}
+};
+
 struct Printnl {
     void operator()(const std::string& str, qi::unused_type, qi::unused_type) const{
         std::cout << std::endl;
