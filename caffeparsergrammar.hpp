@@ -1,3 +1,11 @@
+/**********************************************************************/
+/* Author: Sumanish <sumanish.cse.jgec@gmail.com>                     */
+/* Modified By: Sumanish <sumanish.cse.jgec@gmail.com>                */
+/*                                                                    */  
+/* This source code can be downloaded, use, modify, distribute        */
+/* freely with this headed intact. Please don't delete this header.   */
+/**********************************************************************/ 
+
 #define BOOST_VARIANT_USE_RELAXED_GET_BY_DEFAULT
 
 #include <boost/config/warning_disable.hpp>
