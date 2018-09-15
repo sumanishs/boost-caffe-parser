@@ -21,13 +21,14 @@
 using namespace boost::spirit;
 using namespace boost::phoenix;
 using boost::phoenix::ref;
+using boost::spirit::qi::eoi;
 
 template<typename Lexer>
 struct my_tokens : lex::lexer<Lexer>
 {
     my_tokens()
     {
-        simple_identifier       = "[\"]*[a-zA-Z_][a-zA-Z_0-9]*[\"]*\n";
+        simple_identifier       = "[\"]*[a-zA-Z_][a-zA-Z_0-9.\\\-]*[\"]*\n";
         unsigned_number         = "[0-9][0-9]*";
         double_number           = "[0-9]*[.][0-9][0-9]*";
         colon_                  = "[:]";
@@ -64,10 +65,27 @@ struct my_tokens : lex::lexer<Lexer>
         group_                  = "group";
         dropout_ratio_          = "dropout_ratio";
         dropout_param_          = "dropout_param";
+        source_                 = "source";
+        mean_file_              = "mean_file";
+        backend_                = "backend";
+        batch_size_             = "batch_size";
+        crop_size_              = "crop_size";
+        mirror_                 = "mirror";
+        phase_                  = "phase";
+        channels_               = "channels";
+        height_                 = "height";
+        width_                  = "width";
+        data_param_             = "data_param";
+        transform_param_        = "transform_param";
+        memory_data_param_      = "memory_data_param";
+        include_                = "include";
+        mean_                   = "mean";
+        std_                    = "std";
+        value_                  = "value";
         line                    = "[\\n]";
     
         this->self  += 
-                      simple_identifier | double_number
+                      simple_identifier | double_number 
                     | unsigned_number | left_brace_ | right_brace_ | colon_
                     | semicolon_ | name_ | input_ | input_dim_ | output_dim_
                     | bottom_ | top_ | lr_mult_ | num_output_ | kernel_size_
@@ -78,7 +96,10 @@ struct my_tokens : lex::lexer<Lexer>
 
         this->self +=
                       dim_ | input_shape_ | decay_mult_ | alpha_ | beta_ | lrn_param_
-                    | local_size_ | group_ | dropout_ratio_ | dropout_param_
+                    | local_size_ | group_ | dropout_ratio_ | dropout_param_ | source_ 
+                    | mean_file_ | backend_ | batch_size_ | crop_size_ | mirror_ | phase_
+                    | channels_ | height_ | width_ | memory_data_param_ | include_ | mean_
+                    | std_ | value_ | data_param_ | transform_param_
                     ;
 
         this->self("WS") =  lex::token_def<>("\\/\\/[^\\n]*")           // Single line C like comment 
@@ -86,7 +107,6 @@ struct my_tokens : lex::lexer<Lexer>
                             | lex::token_def<>("[ \\t\\n]+") 
                             ;
     }
-    lex::token_def<std::string> simple_identifier;
     
     lex::token_def<std::string> name_, input_, input_dim_, output_dim_, bottom_, top_, lr_mult_,
                                 num_output_, kernel_size_, stride_, pad_, type_, pool_, param_,
@@ -94,7 +114,9 @@ struct my_tokens : lex::lexer<Lexer>
                                 inner_product_param_ ;
 
     lex::token_def<std::string> dim_, input_shape_, decay_mult_, local_size_, alpha_, beta_, lrn_param_,
-                                group_, dropout_ratio_, dropout_param_
+                                group_, dropout_ratio_, dropout_param_, source_, mean_file_, backend_, batch_size_,
+                                crop_size_, mirror_, phase_, channels_, height_, width_, memory_data_param_,
+                                include_, mean_, std_, value_, data_param_, transform_param_
                                 ;
     
     lex::token_def<int> unsigned_number 
@@ -104,6 +126,7 @@ struct my_tokens : lex::lexer<Lexer>
 
     lex::token_def<std::string> left_brace_, right_brace_, colon_, semicolon_, line
                                 ;
+    lex::token_def<std::string> simple_identifier;
 };
 
 template<typename Iterator, typename Lexer>
@@ -126,8 +149,26 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
         pad_            = tok.pad_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
         type_           = tok.type_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()] ;
         pool_           = tok.pool_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()] ;
-        weight_filler_  = tok.weight_filler_ [PrintStr()] >> tok.left_brace_ >> type_ >> tok.right_brace_;
-        bias_filler_    = tok.bias_filler_  [PrintStr()] >> tok.left_brace_ >> type_ >> tok.right_brace_;
+        
+        weight_filler_statements_ = type_
+                                   | mean_
+                                   | std_
+                                   ;        
+
+        weight_filler_  = tok.weight_filler_ [PrintStr()] 
+                          >> tok.left_brace_ 
+                          >> +weight_filler_statements_
+                          >> tok.right_brace_
+                          ;
+
+        bias_filler_statements_ = type_
+                                 | value_
+                                 ;
+
+        bias_filler_    = tok.bias_filler_  [PrintStr()] 
+                          >> tok.left_brace_ 
+                          >> +bias_filler_statements_ 
+                          >> tok.right_brace_;
         
         dim_            = tok.dim_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
         decay_mult_     = tok.decay_mult_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
@@ -220,6 +261,10 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                                 | inner_product_param_
                                 | lrn_param_
                                 | dropout_param_
+                                | data_param_
+                                | transform_param_
+                                | memory_data_param_
+                                | include_
                                 ;        
 
         layer_          = tok.layer_ [PrintStr()] 
@@ -227,6 +272,64 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                           >> +layer_statements_
                           >> tok.right_brace_
                           ;
+
+        source_     = tok.source_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()];
+        mean_file_  = tok.mean_file_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()];
+        backend_    = tok.backend_ [PrintStr()] >> tok.colon_ >> tok.simple_identifier [PrintStr()];
+        batch_size_ = tok.batch_size_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        crop_size_  = tok.crop_size_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        mirror_     = tok.mirror_   [PrintStr()]  >> tok.colon_ >> tok.simple_identifier [PrintStr()];
+        phase_      = tok.phase_    [PrintStr()]  >> tok.colon_ >> tok.simple_identifier [PrintStr()];
+        channels_   = tok.channels_ [PrintStr()]  >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        height_     = tok.height_   [PrintStr()]  >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        width_      = tok.width_    [PrintStr()]  >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+
+        memory_data_param_statements_ = batch_size_
+                                        | channels_
+                                        | height_
+                                        | width_
+                                        ;
+
+        memory_data_param_ = tok.memory_data_param_ [PrintStr()]
+                             >> tok.left_brace_
+                             >> +memory_data_param_statements_
+                             >> tok.right_brace_
+                             ;
+
+        include_statements_ = phase_
+                              ;
+
+        include_    = tok.include_ [PrintStr()] >> tok.colon_
+                      >> tok.left_brace_
+                      >> +include_statements_
+                      >> tok.right_brace_
+                      ;
+
+        data_param_statements_ = source_
+                                | backend_
+                                | batch_size_
+                                ;
+
+        data_param_ = tok.data_param_
+                      >> tok.left_brace_
+                      >> +data_param_statements_
+                      >> tok.right_brace_
+                      ;
+
+        transform_param_statements_ = crop_size_
+                                     | mirror_
+                                     | mean_file_
+                                     ;
+
+        transform_param_    = tok.transform_param_
+                              >> tok.left_brace_
+                              >> +transform_param_statements_
+                              >> tok.right_brace_
+                              ;
+        
+        mean_   = tok.mean_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
+        std_    = tok.std_ [PrintStr()] >> tok.colon_ >> tok.double_number [PrintDouble()];
+        value_  = tok.value_ [PrintStr()] >> tok.colon_ >> tok.unsigned_number [PrintInt()];
 
         statement = name_
 					| input_
@@ -248,10 +351,30 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                     | weight_filler_
                     | bias_filler_  
                     | input_shape_
+                    | source_
+                    | mean_file_        
+                    | backend_
+                    | batch_size_
+                    | crop_size_
+                    | mirror_
+                    | phase_
+                    | channels_
+                    | height_
+                    | width_
+                    | data_param_
+                    | transform_param_
+                    | memory_data_param_
+                    | include_
+                    | dim_
+                    | mean_
+                    | std_
+                    | value_
                     | layer_
                     ;
 
-        start = +statement;
+        start = +statement
+                //>> eoi
+                ;
     }
     qi::rule<Iterator, qi::in_state_skipper<Lexer> > start, statement;
     
@@ -260,12 +383,19 @@ struct my_grammar : qi::grammar<Iterator, qi::in_state_skipper<Lexer> >
                                                      pool_, param_, param_statements_, weight_filler_, bias_filler_, 
                                                      layer_, layer_statements_, convolution_param_, convolution_param_statements_, 
                                                      pooling_param_, pooling_param_statements_, inner_product_param_, 
-                                                     inner_product_param_statements_
+                                                     inner_product_param_statements_, weight_filler_statements_, 
+                                                     bias_filler_statements_
                                                      ;
     
     qi::rule<Iterator, qi::in_state_skipper<Lexer> > dim_, input_shape_, input_shape_statements_, decay_mult_, alpha_, beta_,
                                                      local_size_, lrn_param_, lrn_param_statements_, group_, dropout_ratio_,
-                                                     dropout_param_, dropout_param_statements_
+                                                     dropout_param_, dropout_param_statements_, source_, mean_file_, backend_,
+                                                     batch_size_, crop_size_, mirror_, phase_, channels_, height_, width_,
+                                                     memory_data_param_, memory_data_param_statements_, include_, include_statements_
+                                                     ;
+
+    qi::rule<Iterator, qi::in_state_skipper<Lexer> > mean_, std_, value_, data_param_, data_param_statements_, transform_param_, 
+                                                     transform_param_statements_
                                                      ;
 };
 

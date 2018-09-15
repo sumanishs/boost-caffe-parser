@@ -43,6 +43,7 @@ CaffeReader::Read(std::string& filename){
     std::stringstream strStream;
     strStream << inFile.rdbuf();
     std::string str(strStream.str());
+    //str.pop_back();
     std::cout << "File content:" << str << "!" << std::endl;
 	inFile.close();
 	
