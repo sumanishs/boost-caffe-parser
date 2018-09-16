@@ -44,23 +44,21 @@ CaffeReader::Read(std::string& filename){
     strStream << inFile.rdbuf();
     std::string str(strStream.str());
     //str.pop_back();
-    std::cout << "File content:" << str << "!" << std::endl;
+    std::cout << "File content:\n" << str << "!" << std::endl;
 	inFile.close();
 	
 	std::string::iterator itr = str.begin();
 	token_iterator  tkstart = tokens.begin(itr, str.end());
 	token_iterator  tkend = tokens.end();
-    std::cout << "Parsing:" << str << std::endl;
+    std::cout << "Parsing:\n" << str << std::endl;
 	bool r = qi::phrase_parse(tkstart, tkend, mygrammar, qi::in_state("WS")[tokens.self]);
 	if(r && tkstart == tkend)
 	{
-	  std::cout << "Parsing succeeded....." << std::endl;
+	  std::cout << "\nParsing succeeded....." << std::endl;
 	}    
 	else
 	{
-	  std::string rest(tkstart, tkend);
-	  std::cout << "Parsing failed....." << std::endl;
-	  std::cout << "Stopped at:" << rest << std::endl;
+	  std::cout << "\nParsing failed....." << std::endl;
 	  return false;	
 	}
     std::cout << "Bye Bye ..... :-)" << std::endl;

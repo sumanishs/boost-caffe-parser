@@ -20,9 +20,7 @@ layer {
     mirror: true
     mean_file: "mean.binaryproto"
   }
-  include: { 
-     phase: TRAIN
-  }
+  include: { phase: TRAIN }
 }
 layer {
   top: "data"
